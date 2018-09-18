@@ -1,0 +1,41 @@
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    http://shiny.rstudio.com/
+getwd()
+library("ggplot2")
+library("ggmap")
+library("sp")
+library("maptools")
+
+
+korea_map_shp = readShapePoly("2013_si_do.shp")
+korea_map = fortify(korea_map_shp)
+
+
+dt_gong<- read.csv('ptprices.csv')
+dt_sil<- read.csv('pyungteak.csv')
+r_colors <- rgb(t(col2rgb(colors()) / 255))
+names(r_colors) <- colors()
+library(shiny)
+library(leaflet)
+
+# Define UI for application that draws a histogram
+ui <- fluidPage(
+  plotOutput("mymap")
+)
+
+# Define server logic required to draw a histogram
+server <- function(input, output) {
+  output$mymap <- renderPlot({
+    ggplot(data = korea_map[ korea_map$id == "16", ], aes(x = long, y = lat, group = group)) + 
+      geom_polygon(fill = "#FFFFFF", colour = "#000000")
+  })
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
+

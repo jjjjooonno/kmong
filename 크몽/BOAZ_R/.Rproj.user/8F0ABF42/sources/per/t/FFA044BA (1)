@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1513850738851.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "931018769",
+    "id" : "FFA044BA",
+    "lastKnownWriteTime" : 1513752200,
+    "last_content_update" : 1513752200,
+    "path" : "~/GoogleDrive/SKKU/BOAZ/Boaz_Anl/LDA_20171221/BOAZ20171221_LDA.R",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "14,26",
+        "scrollLine" : "0"
+    },
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

@@ -1,0 +1,251 @@
+---
+title: "ptmapping"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library("ggplot2")
+library("ggmap")
+library("sp")
+library("maptools")
+library('tmap')
+library('plyr')
+library('sf')
+library('rmapshaper')
+library('RColorBrewer')
+library('shiny')
+library('readxl')
+library('extrafont')
+library('plotly')
+library(ggplot2)
+library(dygraphs)
+library(crosstalk)
+library(highcharter)
+library(rAmCharts)
+codes<- c('팽성읍',
+              '안중읍',
+              '포승읍',
+              '청북읍',
+              '진위면',
+              '서탄면',
+              '고덕면',
+              '오성면',
+              '현덕면',
+              '중앙동',
+              '서정동',
+              '송탄동',
+              '지산동',
+              '송북동',
+              '신장1동',
+              '신장2동',
+              '신평동',
+              '원평동',
+              '통복동',
+              '비전1동',
+              '비전2동',
+              '세교동')
+```
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+
+### Chart A
+
+```{r}
+codes<- c('팽성읍',
+              '안중읍',
+              '포승읍',
+              '청북읍',
+              '진위면',
+              '서탄면',
+              '고덕면',
+              '오성면',
+              '현덕면',
+              '중앙동',
+              '서정동',
+              '송탄동',
+              '지산동',
+              '송북동',
+              '신장1동',
+              '신장2동',
+              '신평동',
+              '원평동',
+              '통복동',
+              '비전1동',
+              '비전2동',
+              '세교동')
+ui <- fluidPage(
+  titlePanel("평택시 공시지가"),
+  sidebarLayout(
+    sidebarPanel(
+      actionButton("go", "지도 보기"),
+      selectInput('year', '연도 선택', c(2013,2014,2015,2016))
+    ),
+    mainPanel(
+      plotOutput("mymap"),
+      plotlyOutput('bar1')
+    )
+  )
+)
+
+server <- function(input, output) {
+  dt <- eventReactive(input$go,{
+    codes<- c('팽성읍',
+              '안중읍',
+              '포승읍',
+              '청북읍',
+              '진위면',
+              '서탄면',
+              '고덕면',
+              '오성면',
+              '현덕면',
+              '중앙동',
+              '서정동',
+              '송탄동',
+              '지산동',
+              '송북동',
+              '신장1동',
+              '신장2동',
+              '신평동',
+              '원평동',
+              '통복동',
+              '비전1동',
+              '비전2동',
+              '세교동')
+    SMshp <- readShapePoly("bnd_dong_31070_2016.shp")
+    SMshp@data$ADM_NM<-factor(codes)
+    dt_gong<- read_excel('gb_gong.xlsx')
+    dt_sil<- read_excel('gb_sil.xlsx')
+    
+    colnames(dt_gong) <- c('year','dong','price')
+    colnames(dt_sil) <- c('year','dong','price')
+    dongs_gong= c()
+    for (i in dt_gong$dong){
+      if (i == '비전동'){
+        dongs_gong <- c(dongs_gong, '비전1동')
+      }else{
+        if (i == '신장동'){
+          dongs_gong <- c(dongs_gong, '신장1동')
+        }else{
+          dongs_gong <- c(dongs_gong, i)
+        }
+      }
+    }
+    dongs_sil= c()
+    for (i in dt_sil$dong){
+      if (i == '비전동'){
+        dongs_sil <- c(dongs_sil, '비전1동')
+      }else{
+        if (i == '신장동'){
+          dongs_sil <- c(dongs_sil, '신장1동')
+        }else{
+          dongs_sil <- c(dongs_sil, i)
+        }
+      }
+    }
+    dt_gong$newdong<- factor(dongs_gong)
+    dt_sil$newdong<- factor(dongs_sil)
+    dt_gong<- dt_gong[dt_gong$newdong %in% codes,]
+    dt_sil<- dt_gong[dt_sil$newdong %in% codes,]
+    data<- dt_gong[dt_gong$year == input$year,]
+    codes_dt<- data.frame(codes)
+    colnames(codes_dt)<- 'newdong'
+    join_data<- join(codes_dt,data,'newdong',type = "left")
+    final_price<- c()
+    for (e in join_data$price){
+      if (is.na(e)){
+        final_price<- c(final_price,0)
+      }else{
+        final_price<- c(final_price,as.integer(e))
+      }
+    }
+    SMshp@data$price<-final_price
+    return(SMshp)
+  })
+  dtt <- eventReactive(input$go,{
+    dt_gong<- read_excel('gb_gong.xlsx')
+    dt_sil<- read_excel('gb_sil.xlsx')
+    
+    colnames(dt_gong) <- c('year','dong','price')
+    colnames(dt_sil) <- c('year','dong','price')
+    dongs_gong= c()
+    for (i in dt_gong$dong){
+      if (i == '비전동'){
+        dongs_gong <- c(dongs_gong, '비전1동')
+      }else{
+        if (i == '신장동'){
+          dongs_gong <- c(dongs_gong, '신장1동')
+        }else{
+          dongs_gong <- c(dongs_gong, i)
+        }
+      }
+    }
+    dongs_sil= c()
+    for (i in dt_sil$dong){
+      if (i == '비전동'){
+        dongs_sil <- c(dongs_sil, '비전1동')
+      }else{
+        if (i == '신장동'){
+          dongs_sil <- c(dongs_sil, '신장1동')
+        }else{
+          dongs_sil <- c(dongs_sil, i)
+        }
+      }
+    }
+    dt_gong$newdong<- factor(dongs_gong)
+    dt_sil$newdong<- factor(dongs_sil)
+    dt_gong<- dt_gong[dt_gong$newdong %in% codes,]
+    dt_sil<- dt_gong[dt_sil$newdong %in% codes,]
+    data<- dt_gong[dt_gong$year == input$year,]
+    codes_dt<- data.frame(codes)
+    colnames(codes_dt)<- 'newdong'
+    join_data<- join(codes_dt,data,'newdong',type = "left")
+    final_price<- c()
+    for (e in join_data$price){
+      if (is.na(e)){
+        final_price<- c(final_price,0)
+      }else{
+        final_price<- c(final_price,as.integer(e))
+      }
+    }
+    dtt <- data.frame(cbind(final_price,codes))
+    return(dtt)
+  })
+  output$mymap <- renderPlot({
+    qtm(dt() , fill="price" , fill.style = "quantile" , fill.n = 16 , fill.palette = "Reds" , fill.title = "서울 지도")+
+      tm_text('price')+
+      tm_layout(legend.outside = TRUE, legend.outside.position = "right", legend.stack = "horizontal")
+  })
+  output$bar1<- renderPlotly({
+    p<-ggplot(dtt(),aes(x=reorder(codes,-final_price),y=final_price))+
+      geom_bar(stat = "summary")+
+      coord_flip()
+    ggplotly(p)
+  })
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
+
+```
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Chart B
+
+```{r}
+
+```
+
+### Chart C
+
+```{r}
+
+```
+

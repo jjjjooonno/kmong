@@ -1,0 +1,136 @@
+Sys.setenv("JAVA_HOME"='C:\\Program Files\\Java\\jre1.8.0_144')##환경변수 설정
+library(rvest)
+library(KoNLP)
+library(stringr)
+library(tm)
+
+useNIADic()
+#################네이버뉴스크롤링##########################
+
+url<-paste0("http://news.naver.com/main/ranking/popularDay.nhn?rankingType=popular_day&sectionId=000&date=")
+urls <- c()
+dates<-seq(format(Sys.Date(),"%Y%m%d"),format(Sys.Date()-30,"%Y%m%d"))
+for(date in dates) {
+  page_url <- paste0(url, date)
+  result <- read_html(page_url) %>%
+    html_nodes(css='dt a') %>%
+    html_attr("href")
+  urls<-c(urls,result)
+}
+
+urls<-paste0("http://news.naver.com",urls)
+
+contents<-c()
+for(url in urls){
+  content<-read_html(url) %>%
+    html_nodes(css='#articleBodyContents')%>%
+    html_text()
+  content=iconv(content,"UTF-8","CP949")
+  contents<-c(contents,content)
+}
+contents<-contents[!is.na(contents)]
+######텍스트 내 불필요한 단어 제거
+texts <- contents %>%
+  str_replace_all(patter="[[:graph:]]*@[[:graph:]]*",replacement=" ")%>% ##이메일제거
+  str_replace_all(pattern="[:punct:]", replacement=" ") %>%  ##구두점 '! " # $ % & ' ( ) * + , - . / : ; < = > ? @ [ \ ] ^ _ ` { | } ~'.
+  str_replace_all(pattern="[ㄱ-ㅎㅏ-ㅣ]+", replacement="") %>%
+  str_replace_all(pattern="/", replacement=" ") %>%   
+  str_replace_all(pattern="[:space:]",replacement=" ")%>%  ##탭, 새 줄, 수직 탭.
+  str_replace_all(pattern="ⓒ [[:graph:]]*",replacement=" ")%>%  ##뉴스태그 없애기
+  str_trim(side="both")
+texts <- gsub('flash 오류를 우회하기 위한 함수 추가 function  flash removeCallback','',texts)
+texts<- gsub('무단 전재 및 재배포 금지',"",texts)
+texts <- texts[texts != ""]
+
+#writeLines(texts,"contetns.txt",sep="\n")
+###############################################################
+
+#########LDA시작하기#################
+texts<-readLines("contetns.txt")
+
+#형태소분석->체언만 뽑아내기
+ko_words <- function(doc) {
+  d <- as.character(doc)
+  pos <- unlist(SimplePos09(d))
+  
+  extracted <- str_match(pos, '([가-힣]+)/N') ##체언만 뽑아냄.
+  
+  keyword <- extracted[, 2]
+  keyword[!is.na(keyword)]
+}
+
+pos <- Map(ko_words, texts) ## 형태소 분석 적용
+
+##형태소 분석 없이 바로 tdm을 만들면 (제 컴퓨터에서는) 한글이 깨지는 경우가 발생하여 tdm 생성전에 미리 형태소 분석을 진행함.
+
+corpus <- Corpus(VectorSource(pos)) ##Corpus 생성
+corpus # 1406개의 문서가 담겨있음.
+inspect(corpus[1]) ##corpus 살펴보기
+
+##tdm 생성 및 전처리
+stopwords2<-c("네이버","구독해주","제보","기자","때문","이날","경우","당시","재배포","무단전재","영상","관련","기사제보","클릭","바로가기","채널","연합뉴스","네이버메인") ##쓸데없이 자주 나오는 것들.
+tdm <- TermDocumentMatrix(corpus, control=list(
+  removePunctuation=TRUE, #기호 없애기(텍스트 전처리 부분에서 이미 해줌) 
+  stopwords=stopwords2, #불용어 없애기
+  removeNumbers=TRUE, #숫자 없애기
+  wordLengths=c(4, 10), #최소 2글자 이상 (한글은 2=한글자)
+  weighting=weightBin)) #해당 단어가 출현하면 1, 아니면 0을 반환.
+
+findAssocs(tdm, "비트코인", 0.5) ##관련이 높은 단어 찾기
+
+# 빈출단어만 간추리기
+
+if(!require(slam)) install.packages("slam") ;library(slam)
+word.count<-as.array(rollup(tdm,2)) ##tdm 행별 합계 구하기
+word.order<-order(word.count,decreasing = T)[1:1000] ##많이 쓰인 단어 순서정리(단어번호)
+freq.word<-word.order[1:1000] ##상위 1000개 단어 재할당
+row.names(tdm[freq.word,]) ##해당 단어 번호 확인
+
+# LDA에 Input data 만들기 (DTM 만든후 다시 dtm2ldaformat함수로 변환)
+
+dtm<-as.DocumentTermMatrix(tdm[freq.word,]) 
+
+if(!require(topicmodels)) install.packages("topicmodels") ;library(topicmodels)
+ldaform=dtm2ldaformat(dtm,omit_empty = T)
+
+# LDA 분석 실시
+## lda.collapsed.gibbs.sampler함수로 단어들의 확률분포를 계산하여 LDA분서을 한다.
+## K=토픽개수
+## num.iterations=사후확률 업데이트 횟수
+## burnin=확률 추정시 제외되는 초반 부 이터레이션 값
+## alpha=문서 내에서 토픽들의 확률분포(1을 주면 유니폼분포가 됨)
+## eta=한 토픽내에 단어들의 확률분포
+
+if(!require(lda)) install.packages("lda") ;library(lda)
+set.seed(1234)
+result.lda=lda.collapsed.gibbs.sampler(documents = ldaform$documents,
+                                       K=20,
+                                       vocab=ldaform$vocab,
+                                       num.iterations = 200,
+                                       burnin = 10,
+                                       alpha = 0.02,
+                                       eta=0.02)
+# 분석결과 확인
+attributes(result.lda)
+
+dim(result.lda$topics) ##20개 토픽에 1000개 단어
+
+t(result.lda$topics) #열은 토픽, 행은 단어
+##확률을 바탕으로 군집화된 단어들을 보고 사람이 토픽의 추론해야함.
+##키워드를 바탕으로 토픽을 추론해야하기 때문에 해당분야에 따라 사전지식을 요할 수 있음.
+
+top.topic.words(result.lda$topics,num.words = 10) ##20개 각 토픽의 상위 10개 단어
+
+dim(result.lda$document_sums) #총 20개토픽, 1406개 문서
+
+result.lda$document_sums[,1] 
+#1번 문서가 각 토픽에 해당하는 단어들을 몇개 가지고 있는가?
+#즉, 1번 문서의 토픽을 알 수 있는 것.
+
+top.topic.documents(document_sums = result.lda$document_sums,num.documents = 10) #상위 10개문서
+##각 토픽을 대표하는 문서번호(열=토픽번호)
+##[1,1] 은 480번 문서에 1번 토픽이 잘 나타나 있음을 의미.
+
+###참고 사이트
+#http://replet.tistory.com/18
+#https://junhewk.github.io/text/2017/08/08/cooccurence-matrix-with-Naver-blog/
